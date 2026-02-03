@@ -3,136 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>互動式迴歸直線探索 (進階統計版)</title>
+    <title>互動式迴歸直線 (手機優化版)</title>
     <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; }
-        .stat-card { background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; }
-        .stat-value { font-family: monospace; font-size: 1.1em; font-weight: bold; color: #2563eb; }
-        .stat-label { font-size: 0.85em; color: #64748b; margin-bottom: 4px; }
-        /* Checkbox 樣式 */
-        .toggle-checkbox:checked { right: 0; border-color: #68D391; }
-        .toggle-checkbox:checked + .toggle-label { background-color: #68D391; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; touch-action: manipulation; }
+        
+        /* 調整滑桿高度，方便手機觸控 */
+        input[type=range] {
+            height: 24px; 
+            margin-top: 5px;
+        }
+        
+        /* 統計卡片樣式 */
+        .stat-card {
+            background: #fff;
+            padding: 8px 4px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 0.85rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .stat-value { font-family: monospace; font-weight: bold; color: #2563eb; font-size: 1rem; }
+        .stat-label { font-size: 0.75rem; color: #64748b; margin-bottom: 2px; }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-2 md:p-6">
 
-    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-6">
-        <h1 class="text-2xl font-bold text-gray-800 mb-2">互動式迴歸直線：統計指標與平均數</h1>
-        <p class="text-gray-600 mb-4 text-sm md:text-base">
-            觀察<span class="text-orange-500 font-bold">橘色星號</span> (平均數點)。試著驗證最佳斜率是否等於 \( r \cdot \frac{\sigma_y}{\sigma_x} \) ？
-        </p>
+    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-md p-3 md:p-6">
+        <h1 class="text-xl md:text-2xl font-bold text-gray-800 text-center mb-2">互動式迴歸直線</h1>
+        
+        <div class="flex flex-col md:flex-row gap-4">
+            
+            <div class="w-full md:w-3/4 flex flex-col">
+                <div id="plotDiv" class="w-full h-[300px] md:h-[500px] border border-gray-100 rounded-lg"></div>
 
-        <div id="plotDiv" style="width:100%; height:520px;"></div>
+                <div class="mt-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                    <div class="mb-3">
+                        <label class="flex justify-between text-sm font-medium text-gray-700">
+                            <span>斜率 \(m\)</span>
+                            <span id="slopeVal" class="font-bold text-blue-600">1.00</span>
+                        </label>
+                        <input type="range" id="slope" min="-5" max="5" step="0.05" value="1" class="w-full cursor-pointer">
+                    </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6 mt-4">
-            <div class="stat-card">
-                <div class="stat-label">\( \bar{x} \) (平均 X)</div>
-                <div id="meanX" class="stat-value text-orange-500">0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">\( \bar{y} \) (平均 Y)</div>
-                <div id="meanY" class="stat-value text-orange-500">0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">\( \sigma_x \) (標準差 X)</div>
-                <div id="sdX" class="stat-value text-gray-700">0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">\( \sigma_y \) (標準差 Y)</div>
-                <div id="sdY" class="stat-value text-gray-700">0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">\( r_{xy} \) (相關係數)</div>
-                <div id="corr" class="stat-value text-purple-600">0.00</div>
-            </div>
-            <div class="stat-card bg-blue-50 border-blue-200">
-                <div class="stat-label text-blue-800">\( r \cdot \frac{\sigma_y}{\sigma_x} \) (理論斜率)</div>
-                <div id="calcSlope" class="stat-value text-blue-700">0.00</div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
-                    <span>調整斜率 (\(m\))</span>
-                    <span id="slopeVal" class="font-bold text-blue-600">1.00</span>
-                </label>
-                <input type="range" id="slope" min="-5" max="5" step="0.01" value="1" class="w-full">
+                    <div>
+                        <label class="flex justify-between text-sm font-medium text-gray-700">
+                            <span>截距 \(b\)</span>
+                            <span id="interceptVal" class="font-bold text-green-600">0.00</span>
+                        </label>
+                        <input type="range" id="intercept" min="-10" max="20" step="0.1" value="0" class="w-full cursor-pointer">
+                    </div>
+                </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
-                    <span>調整截距 (\(b\))</span>
-                    <span id="interceptVal" class="font-bold text-green-600">0.00</span>
-                </label>
-                <input type="range" id="intercept" min="-10" max="20" step="0.1" value="0" class="w-full">
-            </div>
-        </div>
+            <div class="w-full md:w-1/4 flex flex-col gap-2">
+                
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                    <div class="text-sm text-gray-500">當前方程式</div>
+                    <div class="font-mono text-indigo-700 font-bold text-lg mb-2" id="eqDisplay">y = ...</div>
+                    
+                    <div class="text-sm text-gray-500">SSE (誤差平方和)</div>
+                    <div id="sseDisplay" class="font-mono font-bold text-red-600 text-xl">0.00</div>
+                </div>
 
-        <div class="mt-6 flex flex-col md:flex-row justify-between items-center pt-4 border-t">
-            <div class="text-center md:text-left mb-4 md:mb-0">
-                <p class="text-lg">當前方程式: <span class="font-mono text-indigo-700 font-bold" id="eqDisplay">y = ...</span></p>
-                <p class="text-sm text-gray-500 mt-1">SSE (誤差平方和): <span id="sseDisplay" class="font-mono font-bold text-red-600 text-lg">0.00</span></p>
-            </div>
-
-            <div class="flex items-center gap-4">
-                <label class="flex items-center cursor-pointer select-none">
-                    <input type="checkbox" id="showResidualsCheck" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" checked onchange="updatePlot()">
-                    <span class="ml-2 text-sm font-medium text-gray-700">顯示誤差線</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="toggleBestFit()" class="px-2 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-sm transition">
+                        👀 顯示正解
+                    </button>
+                    <button onclick="generateData()" class="px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition">
+                        🎲 重來
+                    </button>
+                </div>
+                
+                <label class="flex items-center justify-center p-2 bg-gray-50 rounded cursor-pointer border border-gray-200">
+                    <input type="checkbox" id="showResidualsCheck" class="w-4 h-4 text-blue-600" checked onchange="updatePlot()">
+                    <span class="ml-2 text-sm text-gray-700">顯示誤差線段</span>
                 </label>
 
-                <button onclick="toggleBestFit()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-sm font-medium transition">
-                    👀 顯示正解
-                </button>
-                <button onclick="generateData()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition shadow">
-                    🎲 重新生成數據
-                </button>
+                <h3 class="text-sm font-bold text-gray-400 mt-2 uppercase text-center">統計指標</h3>
+                <div class="grid grid-cols-3 md:grid-cols-1 gap-2">
+                    <div class="stat-card">
+                        <div class="stat-label">\(\bar{x}\) / \(\bar{y}\)</div>
+                        <div class="stat-value text-orange-500">
+                            <span id="meanX">0</span>, <span id="meanY">0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">\(\sigma_x\) / \(\sigma_y\)</div>
+                        <div class="stat-value text-gray-600">
+                            <span id="sdX">0</span>, <span id="sdY">0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">\(r_{xy}\)</div>
+                        <div id="corr" class="stat-value text-purple-600">0.00</div>
+                    </div>
+                    <div class="stat-card bg-blue-50 border-blue-200 col-span-3 md:col-span-1">
+                        <div class="stat-label text-blue-800">理論斜率 \( r \frac{\sigma_y}{\sigma_x} \)</div>
+                        <div id="calcSlope" class="stat-value text-blue-700">0.00</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        let xData = [];
-        let yData = [];
+        // 與之前相同的邏輯，這裡省略重複註解以保持簡潔
+        let xData = [], yData = [];
         let showBestFit = false;
+        let meanX=0, meanY=0, stdX=0, stdY=0, r_xy=0, theoreticalSlope=0;
 
-        // 統計變數
-        let meanX = 0, meanY = 0;
-        let stdX = 0, stdY = 0;
-        let r_xy = 0;
-        let theoreticalSlope = 0;
-
-        // 初始化
         generateData();
 
-        // 監聽器
         document.getElementById('slope').addEventListener('input', updatePlot);
         document.getElementById('intercept').addEventListener('input', updatePlot);
 
         function generateData() {
-            xData = [];
-            yData = [];
-            // 隨機生成稍微漂亮一點的相關性數據
-            let trueSlope = (Math.random() * 2.5 - 0.5).toFixed(2); // -0.5 ~ 2.0
+            xData = []; yData = [];
+            let trueSlope = (Math.random() * 2.5 - 0.5).toFixed(2);
             let trueIntercept = (Math.random() * 8 + 2).toFixed(2);
-
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 15; i++) { // 手機版點數少一點較清爽
                 let x = Math.random() * 10;
-                let noise = (Math.random() - 0.5) * 4; // 雜訊
-                let y = parseFloat(trueSlope) * x + parseFloat(trueIntercept) + noise;
+                let noise = (Math.random() - 0.5) * 4;
                 xData.push(x);
-                yData.push(y);
+                yData.push(parseFloat(trueSlope) * x + parseFloat(trueIntercept) + noise);
             }
-            
-            // 計算統計量
             calculateStats();
-            
-            // 重置滑桿 (故意不對準答案)
             document.getElementById('slope').value = 1;
-            document.getElementById('intercept').value = meanY - 1 * meanX; // 讓線通過平均點附近，但不完全準
+            document.getElementById('intercept').value = (meanY - meanX).toFixed(1);
             updatePlot();
         }
 
@@ -140,38 +141,20 @@
             const n = xData.length;
             const sumX = xData.reduce((a, b) => a + b, 0);
             const sumY = yData.reduce((a, b) => a + b, 0);
-            
-            meanX = sumX / n;
-            meanY = sumY / n;
-
-            // 計算標準差 (母體標準差 formula，分母為 n)
-            // 註：若教學上習慣用樣本標準差 (n-1)，這邊可改為 n-1，
-            // 但對於斜率公式 r * (sy/sx)，不管是母體或樣本標準差，比例結果是一樣的。
+            meanX = sumX / n; meanY = sumY / n;
             const sumSqDiffX = xData.reduce((a, b) => a + Math.pow(b - meanX, 2), 0);
             const sumSqDiffY = yData.reduce((a, b) => a + Math.pow(b - meanY, 2), 0);
-            
-            stdX = Math.sqrt(sumSqDiffX / n);
-            stdY = Math.sqrt(sumSqDiffY / n);
-
-            // 計算相關係數 r
-            const sumCrossDiff = xData.reduce((sum, xi, i) => {
-                return sum + (xi - meanX) * (yData[i] - meanY);
-            }, 0);
-            
-            // r = Cov(x,y) / (sx * sy)
-            // Cov(x,y) = sumCrossDiff / n
+            stdX = Math.sqrt(sumSqDiffX / n); stdY = Math.sqrt(sumSqDiffY / n);
+            const sumCrossDiff = xData.reduce((sum, xi, i) => sum + (xi - meanX) * (yData[i] - meanY), 0);
             r_xy = (sumCrossDiff / n) / (stdX * stdY);
-
-            // 計算理論斜率
             theoreticalSlope = r_xy * (stdY / stdX);
-
-            // 更新 UI 數據顯示
-            document.getElementById('meanX').innerText = meanX.toFixed(2);
-            document.getElementById('meanY').innerText = meanY.toFixed(2);
-            document.getElementById('sdX').innerText = stdX.toFixed(2);
-            document.getElementById('sdY').innerText = stdY.toFixed(2);
-            document.getElementById('corr').innerText = r_xy.toFixed(3);
-            document.getElementById('calcSlope').innerText = theoreticalSlope.toFixed(3);
+            
+            document.getElementById('meanX').innerText = meanX.toFixed(1);
+            document.getElementById('meanY').innerText = meanY.toFixed(1);
+            document.getElementById('sdX').innerText = stdX.toFixed(1);
+            document.getElementById('sdY').innerText = stdY.toFixed(1);
+            document.getElementById('corr').innerText = r_xy.toFixed(2);
+            document.getElementById('calcSlope').innerText = theoreticalSlope.toFixed(2);
         }
 
         function updatePlot() {
@@ -179,21 +162,16 @@
             let b = parseFloat(document.getElementById('intercept').value);
             let showRes = document.getElementById('showResidualsCheck').checked;
 
-            // 更新數值顯示
             document.getElementById('slopeVal').innerText = m.toFixed(2);
             document.getElementById('interceptVal').innerText = b.toFixed(2);
             let bText = b >= 0 ? `+ ${b.toFixed(2)}` : `- ${Math.abs(b).toFixed(2)}`;
             document.getElementById('eqDisplay').innerText = `y = ${m.toFixed(2)}x ${bText}`;
 
-            // 計算預測線範圍
             let xMin = Math.min(...xData) - 0.5;
             let xMax = Math.max(...xData) + 0.5;
-            let lineX = [xMin, xMax];
-            let lineY = [m * xMin + b, m * xMax + b];
-
-            // 計算殘差
             let sse = 0;
             let resX = [], resY = [];
+
             for(let i=0; i<xData.length; i++) {
                 let predictedY = m * xData[i] + b;
                 let error = yData[i] - predictedY;
@@ -206,80 +184,29 @@
             document.getElementById('sseDisplay').innerText = sse.toFixed(2);
 
             let traces = [];
+            if (showRes) traces.push({ x: resX, y: resY, mode: 'lines', hoverinfo: 'skip', line: { color: 'rgba(255, 0, 0, 0.3)', width: 1 } });
+            traces.push({ x: xData, y: yData, mode: 'markers', name: '數據點', marker: { size: 9, color: 'rgba(59, 130, 246, 0.6)' } });
+            traces.push({ x: [meanX], y: [meanY], mode: 'markers', name: '平均點', marker: { size: 12, color: 'orange', symbol: 'star' } });
+            traces.push({ x: [xMin, xMax], y: [m * xMin + b, m * xMax + b], mode: 'lines', name: '預測線', line: { color: 'rgb(30, 41, 59)', width: 3 } });
 
-            // 1. 殘差線 (最底層)
-            if (showRes) {
-                traces.push({
-                    x: resX, y: resY,
-                    mode: 'lines',
-                    hoverinfo: 'skip',
-                    line: { color: 'rgba(255, 0, 0, 0.3)', width: 1 }
-                });
-            }
-
-            // 2. 數據點
-            traces.push({
-                x: xData, y: yData,
-                mode: 'markers',
-                name: '數據點',
-                marker: { size: 9, color: 'rgba(59, 130, 246, 0.6)' }
-            });
-
-            // 3. 平均數點 (重點顯示)
-            traces.push({
-                x: [meanX], y: [meanY],
-                mode: 'markers',
-                name: '平均點 (x̄, ȳ)',
-                marker: { 
-                    size: 14, 
-                    color: 'orange', 
-                    symbol: 'star',
-                    line: { color: 'black', width: 1 }
-                }
-            });
-
-            // 4. 使用者直線
-            traces.push({
-                x: lineX, y: lineY,
-                mode: 'lines',
-                name: '預測線',
-                line: { color: 'rgb(30, 41, 59)', width: 3 }
-            });
-
-            // 5. 正解線
             if (showBestFit) {
-                // 使用剛剛算好的統計量直接畫線： y - meanY = theoreticalSlope * (x - meanX)
-                // => y = theoreticalSlope * x + (meanY - theoreticalSlope * meanX)
                 let bestIntercept = meanY - theoreticalSlope * meanX;
-                let bestLineY = [
-                    theoreticalSlope * xMin + bestIntercept, 
-                    theoreticalSlope * xMax + bestIntercept
-                ];
-                
-                traces.push({
-                    x: lineX, y: bestLineY,
-                    mode: 'lines',
-                    name: '最佳直線 (OLS)',
-                    line: { color: 'rgba(34, 197, 94, 0.8)', width: 4, dash: 'dot' }
-                });
+                traces.push({ x: [xMin, xMax], y: [theoreticalSlope * xMin + bestIntercept, theoreticalSlope * xMax + bestIntercept], mode: 'lines', name: '最佳直線', line: { color: 'rgba(34, 197, 94, 0.8)', width: 4, dash: 'dot' } });
             }
 
+            // 版面與字體大小針對手機優化
             let layout = {
-                margin: { t: 10, l: 40, r: 20, b: 40 },
-                xaxis: { title: 'X', range: [0, 11] },
-                yaxis: { title: 'Y', range: [-5, 25] },
-                showlegend: true,
-                legend: { x: 0, y: 1, bgcolor: 'rgba(255,255,255,0.8)' },
+                margin: { t: 10, l: 30, r: 10, b: 30 },
+                xaxis: { title: '', range: [0, 11], fixedrange: true }, // fixedrange 禁止縮放，避免手機誤觸
+                yaxis: { title: '', range: [-5, 25], fixedrange: true },
+                showlegend: false, // 手機版隱藏圖例以節省空間
                 hovermode: 'closest'
             };
 
             Plotly.react('plotDiv', traces, layout, {displayModeBar: false});
         }
         
-        function toggleBestFit() {
-            showBestFit = !showBestFit;
-            updatePlot();
-        }
+        function toggleBestFit() { showBestFit = !showBestFit; updatePlot(); }
     </script>
 </body>
 </html>
