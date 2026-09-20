@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高中數學互動探究平台 | Math Tools</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #f8fafc;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between">
+
+  <!-- 頂部導覽列 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+          ∑
+        </div>
+        <h1 class="font-bold text-lg tracking-tight text-slate-900">
+          高中數學互動探究教室
+        </h1>
+      </div>
+      <a href="https://github.com/suhy1022/math-tools" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 transition-colors">
+        GitHub 原始碼 ↗
+      </a>
+    </div>
+  </header>
+
+  <!-- 主要導覽區塊 -->
+  <main class="flex-grow">
+    <!-- Hero 標題區 -->
+    <div class="max-w-6xl mx-auto px-4 pt-10 pb-6 text-center sm:text-left">
+      <span class="inline-block px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-semibold mb-3 border border-indigo-100">
+        數位探究與自主演練
+      </span>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+        動態數學探索工具箱
+      </h2>
+      <p class="text-slate-600 mt-2 text-sm sm:text-base max-w-2xl leading-relaxed">
+        透過即時圖形演算、動態軌跡與參數拉桿，直觀探索幾何意義與代數結構。請點選下方單元進入操作：
+      </p>
+    </div>
+
+    <!-- 工具卡片展示列表 -->
+    <section class="max-w-6xl mx-auto px-4 py-4 mb-12">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        <!-- 卡片 1：正餘弦疊合 (trig.html) -->
+        <a href="./trig.html" class="group block bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-indigo-100/60 to-transparent rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+          
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-200">
+                ~
+              </div>
+              <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                三角函數
+              </span>
+            </div>
+
+            <h3 class="text-lg font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+              正餘弦函數疊合
+            </h3>
+            <p class="text-slate-600 text-sm mt-2 leading-relaxed">
+              拖曳正餘弦函數對應點，觀察縱座標加成動態軌跡，並探索 $a\sin x + b\cos x$ 疊合波形、振幅與相位角的變化規律。
+            </p>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-500">
+            <span class="flex items-center gap-1.5 text-emerald-600">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              即刻探索
+            </span>
+            <span class="group-hover:translate-x-1 transition-transform text-indigo-600 font-semibold flex items-center gap-0.5">
+              進入工具 ➔
+            </span>
+          </div>
+        </a>
+
+        <!-- 卡片 2：散佈圖與迴歸直線 (regression.html) -->
+        <a href="./regression.html" class="group block bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-xl hover:border-blue-300 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-blue-100/60 to-transparent rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+          
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl group-hover:bg-blue-600 group-hover:text-white transition-colors duration-200">
+                📈
+              </div>
+              <span class="text-xs font-semibold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-100">
+                數據分析
+              </span>
+            </div>
+
+            <h3 class="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+              散佈圖與迴歸直線
+            </h3>
+            <p class="text-slate-600 text-sm mt-2 leading-relaxed">
+              即時拖曳調整數據點，直觀觀察最小平方法殘差平方和、相關係數 $r$ 與最適合直線斜率之間的關聯。
+            </p>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-500">
+            <span class="flex items-center gap-1.5 text-emerald-600">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              即刻探索
+            </span>
+            <span class="group-hover:translate-x-1 transition-transform text-blue-600 font-semibold flex items-center gap-0.5">
+              進入工具 ➔
+            </span>
+          </div>
+        </a>
+
+        <!-- 卡片 3：後續擴充預留卡片 -->
+        <div class="bg-slate-50/70 rounded-2xl p-6 border border-dashed border-slate-300 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="w-12 h-12 rounded-xl bg-slate-200/80 text-slate-500 flex items-center justify-center text-xl">
+                ✨
+              </div>
+              <span class="text-xs font-semibold px-2.5 py-1 bg-slate-200/70 text-slate-600 rounded-full">
+                單元擴充中
+              </span>
+            </div>
+            <h3 class="text-lg font-bold text-slate-700">更多高中數學單元</h3>
+            <p class="text-slate-500 text-sm mt-2 leading-relaxed">
+              空間向量外積、巴斯卡三角形動態探索等互動網頁單元將陸續整理加入。
+            </p>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-400">
+            <span>Coming Soon</span>
+            <span>敬請期待</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- 頁尾 -->
+  <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400">
+    <p>高中數學互動探究工具箱 | 課堂教學與自學探究設計</p>
+  </footer>
+
+</body>
+</html>
