@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>傅立葉級數與聲音合成 - 互動式教學</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        }
+        canvas {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+        }
+        input[type=range] {
+            accent-color: #4f46e5;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-gray-800 p-4 md:p-8 flex items-center justify-center">
+
+    <div class="max-w-[1400px] w-full mx-auto glass-panel rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-2xl">
+        
+        <!-- Left Panel: Controls (Fixed 300px width) -->
+        <div class="w-full md:w-[300px] shrink-0 p-6 md:p-8 bg-white border-r border-gray-100 flex flex-col gap-6 relative z-10 shadow-sm">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 mb-2">傅立葉合成器</h1>
+                <p class="text-sm text-gray-500">透過疊加不同頻率與振幅的正弦波，合成各種聲音波形。</p>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label class="text-sm font-semibold text-gray-700">選擇波形 (Waveform)</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button class="wave-btn active px-2 py-2 rounded-lg border border-indigo-600 bg-indigo-50 text-indigo-700 text-sm font-medium transition-colors" data-wave="sine">純音<br><span class="text-xs font-normal">Sine</span></button>
+                    <button class="wave-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors" data-wave="square">方形波<br><span class="text-xs font-normal">Square</span></button>
+                    <button class="wave-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors" data-wave="sawtooth">鋸齒波<br><span class="text-xs font-normal">Sawtooth</span></button>
+                    <button class="wave-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors" data-wave="triangle">三角形波<br><span class="text-xs font-normal">Triangle</span></button>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-5">
+                <div class="flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <label for="freq" class="text-sm font-semibold text-gray-700">基音頻率 (f)</label>
+                        <span id="freq-val" class="text-sm font-mono text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">440 Hz</span>
+                    </div>
+                    <input type="range" id="freq" min="50" max="1000" value="440" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <label for="harmonics" class="text-sm font-semibold text-gray-700">諧波數量 (n)</label>
+                        <span id="harmonics-val" class="text-sm font-mono text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">1</span>
+                    </div>
+                    <input type="range" id="harmonics" min="1" max="50" value="1" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                </div>
+            </div>
+
+            <div class="mt-auto pt-4 flex flex-row gap-3 w-full">
+                <button id="play-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-2 rounded-xl shadow-lg shadow-indigo-200 transition-all active:scale-95 flex justify-center items-center gap-1.5 text-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    播放
+                </button>
+                <button id="stop-btn" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 px-2 rounded-xl transition-all active:scale-95 flex justify-center items-center gap-1.5 text-sm" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+                    停止
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Panel: Visualization (Takes remaining width) -->
+        <div class="flex-1 min-w-0 p-6 md:p-8 bg-gray-50 flex flex-col items-center justify-center relative">
+            <div class="w-full h-96 relative bg-white border border-gray-200 rounded-2xl shadow-inner overflow-hidden">
+                <canvas id="waveform-canvas" class="w-full h-full block"></canvas>
+                <!-- Mathematical display area -->
+                <div class="absolute top-5 left-5 flex flex-col bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-gray-100 shadow-sm pointer-events-none">
+                    <span class="text-xs font-semibold text-gray-400 tracking-wider uppercase mb-1">即時波形預覽 (Time Domain)</span>
+                    <span id="equation-display" class="text-sm font-mono text-indigo-600 font-bold">y(t) = sin(2πft)</span>
+                </div>
+            </div>
+            
+            <div class="mt-6 w-full text-center text-sm text-gray-500">
+                💡 註：播放聲音時，系統會為每一個諧波產生一個獨立的 Web Audio OscillatorNode，<br>完美模擬真實的傅立葉級數加法合成 (Additive Synthesis)。
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const canvas = document.getElementById('waveform-canvas');
+        const ctx = canvas.getContext('2d');
+        const freqSlider = document.getElementById('freq');
+        const harmonicsSlider = document.getElementById('harmonics');
+        const freqVal = document.getElementById('freq-val');
+        const harmonicsVal = document.getElementById('harmonics-val');
+        const waveBtns = document.querySelectorAll('.wave-btn');
+        const playBtn = document.getElementById('play-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const equationDisplay = document.getElementById('equation-display');
+
+        // State Variables
+        let currentWaveType = 'sine';
+        let currentFreq = parseInt(freqSlider.value);
+        let currentHarmonics = parseInt(harmonicsSlider.value);
+        let isPlaying = false;
+
+        // Audio Context & Nodes
+        let audioCtx;
+        let masterGain;
+        let activeOscillators = [];
+        let activeGains = [];
+
+        freqSlider.addEventListener('input', (e) => {
+            currentFreq = parseInt(e.target.value);
+            freqVal.textContent = `${currentFreq} Hz`;
+            drawWaveform();
+            if (isPlaying) updateAudioParameters();
+        });
+
+        harmonicsSlider.addEventListener('input', (e) => {
+            currentHarmonics = parseInt(e.target.value);
+            harmonicsVal.textContent = currentHarmonics;
+            updateEquationDisplay();
+            drawWaveform();
+            if (isPlaying) {
+                stopAudio();
+                playAudio();
+            }
+        });
+
+        waveBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                waveBtns.forEach(b => {
+                    b.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-indigo-700');
+                    b.classList.add('border-gray-200', 'bg-white', 'text-gray-600');
+                });
+                const target = e.currentTarget;
+                target.classList.remove('border-gray-200', 'bg-white', 'text-gray-600');
+                target.classList.add('border-indigo-600', 'bg-indigo-50', 'text-indigo-700');
+                
+                currentWaveType = target.dataset.wave;
+                
+                // Adjust default harmonic slider based on selected wave
+                if (currentWaveType === 'sine') {
+                    harmonicsSlider.value = 1;
+                    currentHarmonics = 1;
+                } else if (currentHarmonics === 1) {
+                    harmonicsSlider.value = 15; // Set a default good visual amount for complex waves
+                    currentHarmonics = 15;
+                }
+                harmonicsVal.textContent = currentHarmonics;
+                
+                updateEquationDisplay();
+                drawWaveform();
+                if (isPlaying) {
+                    stopAudio();
+                    playAudio();
+                }
+            });
+        });
+
+        /**
+         * Calculate the Fourier coefficient (Amplitude) for the n-th harmonic based on wave type.
+         */
+        function getCoefficient(waveType, n) {
+            switch (waveType) {
+                case 'sine':
+                    return n === 1 ? 1 : 0;
+                
+                case 'square':
+                    if (n % 2 === 0) return 0;
+                    return 4 / (Math.PI * n);
+                
+                case 'sawtooth':
+                    const signSaw = (n % 2 === 0) ? -1 : 1;
+                    return signSaw * (2 / (Math.PI * n));
+                
+                case 'triangle':
+                    if (n % 2 === 0) return 0;
+                    const signTri = (((n - 1) / 2) % 2 === 0) ? 1 : -1;
+                    return signTri * (8 / (Math.PI * Math.PI * n * n));
+                
+                default:
+                    return 0;
+            }
+        }
+
+        function updateEquationDisplay() {
+            let eq = "";
+            if (currentWaveType === 'sine') eq = "y(t) = sin(2πft)";
+            else if (currentWaveType === 'square') eq = `y(t) = (4/π) ∑ (1/n)sin(2πnft) [n=odd, 1..${currentHarmonics}]`;
+            else if (currentWaveType === 'sawtooth') eq = `y(t) = (2/π) ∑ ((-1)ⁿ⁺¹/n)sin(2πnft) [n=1..${currentHarmonics}]`;
+            else if (currentWaveType === 'triangle') eq = `y(t) = (8/π²) ∑ ((-1)^((n-1)/2)/n²)sin(2πnft) [n=odd, 1..${currentHarmonics}]`;
+            equationDisplay.textContent = eq;
+        }
+
+        function drawWaveform() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            // Scale by 2 for high DPI displays
+            canvas.width = rect.width * 2; 
+            canvas.height = rect.height * 2;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // Offset the center slightly down to make room for text at the top
+            const centerY = h * 0.55; 
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            // Draw Center Line (X-axis)
+            ctx.beginPath();
+            ctx.strokeStyle = '#e5e7eb'; // gray-200
+            ctx.lineWidth = 2;
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(w, centerY);
+            ctx.stroke();
+
+            // Setup Waveform Style
+            ctx.beginPath();
+            ctx.strokeStyle = '#4f46e5'; // indigo-600
+            ctx.lineWidth = 4;
+            ctx.lineJoin = 'round';
+
+            // Draw exactly 5 periods of the fundamental frequency
+            const periodsToDraw = 5;
+            const totalTime = periodsToDraw / currentFreq;
+            
+            // Scale factor: smaller amplitude so it doesn't overlap with top text
+            const verticalScale = h * 0.22;
+
+            for (let x = 0; x <= w; x += 2) {
+                const t = (x / w) * totalTime;
+                let y = 0;
+
+                for (let n = 1; n <= currentHarmonics; n++) {
+                    const coeff = getCoefficient(currentWaveType, n);
+                    if (coeff === 0) continue;
+                    y += coeff * Math.sin(2 * Math.PI * n * currentFreq * t);
+                }
+
+                const canvasY = centerY - (y * verticalScale);
+
+                if (x === 0) {
+                    ctx.moveTo(x, canvasY);
+                } else {
+                    ctx.lineTo(x, canvasY);
+                }
+            }
+            ctx.stroke();
+        }
+
+        window.addEventListener('resize', drawWaveform);
+
+        function initAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playAudio() {
+            initAudioContext();
+            
+            masterGain = audioCtx.createGain();
+            // Safe volume level for 50 harmonics 
+            masterGain.gain.value = 0.25; 
+            masterGain.connect(audioCtx.destination);
+
+            activeOscillators = [];
+            activeGains = [];
+
+            for (let n = 1; n <= currentHarmonics; n++) {
+                const coeff = getCoefficient(currentWaveType, n);
+                if (coeff === 0) continue; 
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine'; 
+                osc.frequency.value = currentFreq * n; 
+                gain.gain.value = coeff; 
+
+                osc.connect(gain);
+                gain.connect(masterGain);
+                
+                osc.start();
+                activeOscillators.push(osc);
+                activeGains.push({gainNode: gain, n: n}); 
+            }
+
+            isPlaying = true;
+            updateButtonStates();
+        }
+
+        function updateAudioParameters() {
+            if (!isPlaying || !audioCtx) return;
+
+            activeOscillators.forEach((osc, index) => {
+                const n = activeGains[index].n;
+                const coeff = getCoefficient(currentWaveType, n);
+                
+                osc.frequency.setTargetAtTime(currentFreq * n, audioCtx.currentTime, 0.05);
+                activeGains[index].gainNode.gain.setTargetAtTime(coeff, audioCtx.currentTime, 0.05);
+            });
+        }
+
+        function stopAudio() {
+            if (!isPlaying) return;
+            
+            // Fade out to prevent popping
+            if (masterGain && audioCtx) {
+                masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+            }
+
+            setTimeout(() => {
+                activeOscillators.forEach(osc => {
+                    try { osc.stop(); osc.disconnect(); } catch (e) {}
+                });
+                activeGains.forEach(g => {
+                    try { g.gainNode.disconnect(); } catch(e) {}
+                });
+                
+                if (masterGain) masterGain.disconnect();
+                
+                activeOscillators = [];
+                activeGains = [];
+            }, 100);
+
+            isPlaying = false;
+            updateButtonStates();
+        }
+
+        function updateButtonStates() {
+            if (isPlaying) {
+                playBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'shadow-green-200');
+                playBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-indigo-200');
+                playBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg> 播放中...`;
+                
+                stopBtn.disabled = false;
+                stopBtn.classList.remove('bg-gray-200', 'text-gray-800');
+                stopBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'text-white', 'shadow-lg', 'shadow-red-200');
+            } else {
+                playBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-indigo-200');
+                playBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'shadow-green-200');
+                playBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> 播放`;
+                
+                stopBtn.disabled = true;
+                stopBtn.classList.add('bg-gray-200', 'text-gray-800');
+                stopBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'text-white', 'shadow-lg', 'shadow-red-200');
+            }
+        }
+
+        playBtn.addEventListener('click', () => {
+            if (!isPlaying) {
+                playAudio();
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            stopAudio();
+        });
+
+        // Initialize display on load
+        window.addEventListener('load', () => {
+            updateEquationDisplay();
+            drawWaveform();
+        });
+
+    </script>
+</body>
+</html>
