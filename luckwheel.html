@@ -1,0 +1,1911 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <!-- 平板與觸控螢幕最佳化：鎖定不必要縮放 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>幸運輪盤抽籤工具</title>
+
+    <!-- iPadOS (Safari) 全螢幕 Web App 設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="幸運輪盤">
+
+    <!-- Android (Chrome) 全螢幕 Web App 設定 -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4f46e5">
+
+    <!-- 內嵌 SVG 桌面圖示 (加入主畫面時顯示為繽紛輪盤 App 圖示) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><text x='50%25' y='54%25' dominant-baseline='central' text-anchor='middle' font-size='64'>🎡</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><text x='50%25' y='54%25' dominant-baseline='central' text-anchor='middle' font-size='64'>🎡</text></svg>">
+
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome 圖示 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- 引入 Google Fonts (Noto Sans TC & Inter) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Inter"', '"Noto Sans TC"', 'sans-serif'],
+                    },
+                    animation: {
+                        'bounce-short': 'bounce 0.5s ease-in-out 2',
+                        'pop-in': 'popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                    },
+                    keyframes: {
+                        popIn: {
+                            '0%': { opacity: '0', transform: 'scale(0.8) translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* 自訂捲軸樣式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* 輪盤指針陰影與微調 */
+        .wheel-pointer {
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+            transition: transform 0.05s ease-out;
+        }
+        .pointer-tick {
+            transform: rotate(-18deg);
+        }
+
+        /* 隱藏數字輸入框預設箭頭 */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        /* 避免平板連點兩下觸發畫面縮放 */
+        button, select, input, textarea {
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white overflow-x-hidden">
+
+    <!-- 慶祝彩帶特效畫布 -->
+    <canvas id="confettiCanvas" class="fixed inset-0 pointer-events-none z-50"></canvas>
+
+    <!-- 班級管理與匯入/匯出 自訂互動彈窗 (不使用原生 alert/prompt) -->
+    <div id="customModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 animate-pop-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="modalTitle" class="text-lg font-black text-slate-800 flex items-center gap-2">
+                    <i id="modalIcon" class="fa-solid fa-folder-plus text-indigo-600"></i>
+                    <span id="modalTitleText">新增班級</span>
+                </h3>
+                <button onclick="closeModal()" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <p id="modalDesc" class="text-sm text-slate-600 mb-4 leading-relaxed"></p>
+
+            <!-- 單行文字輸入框 (新增/改名班級用) -->
+            <div id="modalInputWrapper" class="mb-5 hidden">
+                <input type="text" id="modalTextInput" placeholder="例如：高一 (2) 班" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 font-bold text-slate-800">
+            </div>
+
+            <!-- 多行 JSON 備份/還原輸入框 -->
+            <div id="modalTextareaWrapper" class="mb-5 hidden">
+                <textarea id="modalTextareaInput" rows="6" placeholder="請貼上備份的 JSON 資料..." class="w-full p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 font-mono text-xs text-slate-700 bg-slate-50"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2.5">
+                <button onclick="closeModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition">
+                    取消
+                </button>
+                <button id="modalConfirmBtn" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-sm transition active:scale-95">
+                    確認
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white border-b border-slate-200 shadow-xs sticky top-0 z-30">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200 shrink-0">
+                    <i class="fa-solid fa-dharmachakra text-xl animate-spin" style="animation-duration: 12s;"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-base sm:text-xl font-black tracking-tight text-slate-800">
+                            幸運輪盤抽籤工具
+                        </h1>
+                        <span id="activeClassHeaderBadge" class="text-xs font-bold px-2.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200">
+                            載入中...
+                        </span>
+                    </div>
+                    <!-- 自動儲存狀態指示器 -->
+                    <div class="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold mt-0.5">
+                        <i id="saveStatusIcon" class="fa-solid fa-cloud-arrow-up"></i>
+                        <span id="saveStatusText">已自動儲存於本機 (localStorage)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頂部快速資訊與控制按鈕 -->
+            <div class="flex items-center space-x-2 sm:space-x-2.5">
+                <!-- 快捷鍵提示 -->
+                <div class="hidden xl:flex items-center text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 mr-1">
+                    <span class="font-semibold text-slate-700 mr-1.5"><i class="fa-regular fa-keyboard mr-1"></i>快捷鍵：</span>
+                    按 <kbd class="px-1.5 py-0.5 mx-1 bg-white rounded shadow-xs border border-slate-300 font-mono text-[11px]">Space</kbd> 開始抽籤
+                </div>
+
+                <!-- 音效開關 -->
+                <button id="muteBtn" onclick="toggleMute()" class="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition active:scale-95" title="切換音效">
+                    <i id="muteIcon" class="fa-solid fa-volume-high text-indigo-600 w-4 text-center"></i>
+                    <span id="muteText" class="hidden md:inline">音效開啟</span>
+                </button>
+
+                <!-- 重設本班按鈕 -->
+                <button onclick="resetAll()" class="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 font-semibold text-sm transition active:scale-95 shadow-xs" title="將本班所有已抽中者加回輪盤並清空本班紀錄">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>重設本班紀錄</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區：三欄響應式佈局 -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- 左欄：班級管理、名單管理與抽籤設定 (佔 3 欄) -->
+        <section class="lg:col-span-3 flex flex-col gap-4 order-2 lg:order-1">
+            
+            <!-- 1. 多班級切換與管理卡片 (新增) -->
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4 sm:p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-chalkboard-user text-indigo-600"></i>
+                        <span>班級名單切換</span>
+                    </h2>
+                    <div class="flex items-center gap-1">
+                        <button onclick="openBackupModal()" class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition flex items-center gap-1" title="跨裝置匯出或匯入所有班級名單">
+                            <i class="fa-solid fa-file-export"></i> 備份/匯入
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 班級下拉選單 -->
+                <div class="relative mb-2.5">
+                    <select id="classSelectDropdown" onchange="switchClass(this.value)" class="w-full appearance-none bg-indigo-50/70 hover:bg-indigo-50 border border-indigo-200 text-indigo-950 font-extrabold text-sm rounded-xl px-3.5 py-2.5 pr-9 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition cursor-pointer">
+                        <!-- 由 JS 動態填入班級選項 -->
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-indigo-600">
+                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </div>
+                </div>
+
+                <!-- 班級管理操作按鈕列 -->
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button onclick="promptAddClass()" class="py-1.5 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition flex items-center justify-center gap-1 shadow-xs active:scale-95">
+                        <i class="fa-solid fa-plus"></i> 新增班級
+                    </button>
+                    <button onclick="promptRenameClass()" class="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition flex items-center justify-center gap-1 active:scale-95">
+                        <i class="fa-solid fa-pen"></i> 改名
+                    </button>
+                    <button onclick="promptDeleteClass()" class="py-1.5 px-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-xs transition flex items-center justify-center gap-1 active:scale-95">
+                        <i class="fa-regular fa-trash-can"></i> 刪除班級
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. 抽籤規則設定卡片 -->
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4 sm:p-5">
+                <h2 class="text-base font-bold text-slate-800 mb-3.5 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-indigo-600"></i>
+                    <span>抽籤條件設定</span>
+                </h2>
+
+                <div class="space-y-4">
+                    <!-- 每次抽選人數 (N) -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1.5">
+                            <label for="drawCountInput" class="text-sm font-semibold text-slate-700">每次抽選人數 (N)</label>
+                            <span id="maxDrawHint" class="text-xs text-slate-400">上限: 36 人</span>
+                        </div>
+                        <div class="flex items-center">
+                            <button onclick="adjustDrawCount(-1)" class="w-10 h-10 rounded-l-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-r-0 border-slate-300 flex items-center justify-center transition active:bg-slate-300">
+                                <i class="fa-solid fa-minus text-xs"></i>
+                            </button>
+                            <input type="number" id="drawCountInput" value="1" min="1" max="36" onchange="validateDrawCount()" class="w-full h-10 text-center font-bold text-lg text-indigo-600 border-y border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                            <button onclick="adjustDrawCount(1)" class="w-10 h-10 rounded-r-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-l-0 border-slate-300 flex items-center justify-center transition active:bg-slate-300">
+                                <i class="fa-solid fa-plus text-xs"></i>
+                            </button>
+                        </div>
+                        <!-- 快速人數選擇按鈕 -->
+                        <div class="grid grid-cols-4 gap-1.5 mt-2">
+                            <button onclick="setDrawCount(1)" class="py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 transition border border-transparent hover:border-indigo-200">1人</button>
+                            <button onclick="setDrawCount(2)" class="py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 transition border border-transparent hover:border-indigo-200">2人</button>
+                            <button onclick="setDrawCount(3)" class="py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 transition border border-transparent hover:border-indigo-200">3人</button>
+                            <button onclick="setDrawCount(5)" class="py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 transition border border-transparent hover:border-indigo-200">5人</button>
+                        </div>
+                    </div>
+
+                    <!-- 多人抽選模式 (當 N > 1 時顯示或隨時可切換) -->
+                    <div id="multiModeContainer" class="pt-2 border-t border-slate-100">
+                        <label class="text-sm font-semibold text-slate-700 block mb-2">多人抽選方式 (N &gt; 1 時)</label>
+                        <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                            <button id="modeSequentialBtn" onclick="setMultiDrawMode('sequential')" class="py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-white text-indigo-600 shadow-sm">
+                                <i class="fa-solid fa-forward-step"></i> 連續轉動抽出
+                            </button>
+                            <button id="modeSimultaneousBtn" onclick="setMultiDrawMode('simultaneous')" class="py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900">
+                                <i class="fa-solid fa-bolt"></i> 一次同時抽出
+                            </button>
+                        </div>
+                        <p id="multiModeDesc" class="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                            輪盤將自動連續旋轉 N 次，依序揭曉每位幸運兒。
+                        </p>
+                    </div>
+
+                    <!-- 排除已抽中者 Toggle -->
+                    <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-slate-700">排除已抽中者</div>
+                            <div class="text-xs text-slate-400">抽中後自動從輪盤移除，不重複中獎</div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="excludeWinnersToggle" class="sr-only peer" checked onchange="handleExcludeToggleChange()">
+                            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 名單輸入與管理卡片 -->
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4 sm:p-5 flex-1 flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-users text-indigo-600"></i>
+                        <span>本班名單編輯</span>
+                    </h2>
+                    <span class="text-[11px] font-medium text-slate-400">修改後自動儲存</span>
+                </div>
+
+                <!-- 人數統計徽章 -->
+                <div class="grid grid-cols-2 gap-2.5 mb-3">
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between">
+                        <span class="text-xs font-medium text-slate-500">本班總人數</span>
+                        <span id="totalCountBadge" class="text-base font-black text-slate-800">0</span>
+                    </div>
+                    <div class="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-2.5 flex items-center justify-between">
+                        <span class="text-xs font-medium text-indigo-600">輪盤剩餘人數</span>
+                        <span id="remainingCountBadge" class="text-base font-black text-indigo-700">0</span>
+                    </div>
+                </div>
+
+                <!-- 快速匯入按鈕組 -->
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    <button onclick="importPreset('36numbers')" class="flex-1 py-1.5 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-lg border border-indigo-200/60 transition flex items-center justify-center gap-1 whitespace-nowrap">
+                        <i class="fa-solid fa-list-ol"></i> 載入 1~36 號
+                    </button>
+                    <button onclick="importPreset('sampleNames')" class="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg transition flex items-center justify-center gap-1 whitespace-nowrap">
+                        <i class="fa-solid fa-user-check"></i> 範例姓名
+                    </button>
+                    <button onclick="clearNamesList()" class="py-1.5 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium text-xs rounded-lg transition flex items-center justify-center gap-1 whitespace-nowrap" title="清空本班所有名單">
+                        <i class="fa-regular fa-trash-can"></i> 清空
+                    </button>
+                </div>
+
+                <!-- 姓名輸入框 -->
+                <div class="relative flex-1 flex flex-col">
+                    <textarea 
+                        id="namesTextarea" 
+                        rows="8"
+                        placeholder="請輸入本班抽籤名單，每行一個名字或座號...&#10;例如：&#10;01號 王小明&#10;02號 林小華"
+                        oninput="handleNamesInput()"
+                        class="w-full flex-1 p-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white transition resize-y font-medium text-slate-700 leading-relaxed"
+                    ></textarea>
+                </div>
+
+                <!-- 已排除名單小標籤展示 (支援點擊單一標籤加回輪盤) -->
+                <div id="excludedPoolSection" class="hidden mt-3 pt-3 border-t border-slate-100">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-xs font-semibold text-slate-500 flex items-center gap-1" title="點擊下方個別標籤可單獨加回輪盤">
+                            <i class="fa-solid fa-user-slash text-slate-400"></i> 已抽中排除 (<span id="excludedCountText">0</span>)
+                        </span>
+                        <button onclick="restoreExcludedWinners()" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline">
+                            全部加回輪盤
+                        </button>
+                    </div>
+                    <div id="excludedTagsList" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1">
+                        <!-- 動態生成已排除標籤 -->
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 中欄：互動幸運大輪盤 (佔 5 欄) -->
+        <section class="lg:col-span-5 flex flex-col items-center justify-center order-1 lg:order-2 bg-white rounded-3xl shadow-sm border border-slate-200/80 p-4 sm:p-8 min-h-[460px] lg:min-h-[680px] relative overflow-hidden">
+            
+            <!-- 頂部狀態橫幅 -->
+            <div class="w-full flex items-center justify-between mb-2 sm:mb-4 z-10">
+                <div id="wheelStatusBadge" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>準備就緒，點擊中央按鈕開始</span>
+                </div>
+                <div id="currentPointerTarget" class="text-sm font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 truncate max-w-[160px] sm:max-w-[220px]">
+                    指標指向：--
+                </div>
+            </div>
+
+            <!-- 輪盤容器 -->
+            <div class="relative w-full max-w-[460px] aspect-square flex items-center justify-center my-auto">
+                
+                <!-- 外圈裝飾光暈 -->
+                <div class="absolute inset-2 rounded-full bg-gradient-to-tr from-indigo-500/10 via-purple-500/10 to-amber-500/10 blur-xl pointer-events-none"></div>
+
+                <!-- 輪盤畫布 -->
+                <canvas id="wheelCanvas" class="w-full h-full relative z-10"></canvas>
+
+                <!-- 右側固定指針 (指向 3 點鐘方向 / 0 度位置) -->
+                <div id="wheelPointer" class="wheel-pointer absolute -right-2 sm:-right-4 top-1/2 -translate-y-1/2 z-20 pointer-events-none flex items-center">
+                    <svg width="56" height="44" viewBox="0 0 56 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 22L42 4V40L4 22Z" fill="#EF4444" stroke="white" stroke-width="3" stroke-linejoin="round"/>
+                        <circle cx="36" cy="22" r="6" fill="#FEF2F2"/>
+                    </svg>
+                </div>
+
+                <!-- 輪盤中央「開始抽籤」按鈕 -->
+                <button 
+                    id="spinBtn" 
+                    onclick="startDrawProcess()"
+                    class="absolute z-20 w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-b from-indigo-500 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white font-black shadow-[0_8px_25px_rgba(79,70,229,0.45)] border-4 border-white flex flex-col items-center justify-center transition transform active:scale-95 hover:scale-105 cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                    <i id="spinBtnIcon" class="fa-solid fa-play text-xl sm:text-2xl mb-0.5 ml-0.5 group-hover:scale-110 transition"></i>
+                    <span id="spinBtnText" class="text-sm sm:text-base tracking-wider">開始抽籤</span>
+                </button>
+            </div>
+
+            <!-- 底部操作輔助列 -->
+            <div class="w-full mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <div class="flex items-center gap-2">
+                    <button onclick="shuffleWheelNames()" id="shuffleBtn" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-shuffle text-indigo-600"></i> 隨機打亂輪盤順序
+                    </button>
+                </div>
+                <div id="progressText" class="font-semibold text-indigo-600"></div>
+            </div>
+        </section>
+
+        <!-- 右欄：當次中獎看板與歷史紀錄 (佔 4 欄) -->
+        <section class="lg:col-span-4 flex flex-col gap-5 order-3 h-full">
+            
+            <!-- 當次中獎名單看板 (Highlight Card) -->
+            <div class="bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 rounded-2xl shadow-md p-5 text-white relative overflow-hidden">
+                <!-- 背景裝飾圖案 -->
+                <div class="absolute -right-6 -bottom-6 text-white/10 text-8xl pointer-events-none">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+
+                <div class="flex items-center justify-between mb-3 relative z-10">
+                    <h2 class="text-base font-bold flex items-center gap-2">
+                        <i class="fa-solid fa-crown text-amber-300"></i>
+                        <span>當次抽出幸運兒</span>
+                    </h2>
+                    <span id="currentBatchCountBadge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm">
+                        等待抽籤
+                    </span>
+                </div>
+
+                <!-- 當次得獎者展示區 -->
+                <div id="currentWinnersDisplay" class="min-h-[140px] max-h-[260px] overflow-y-auto rounded-xl bg-white/10 backdrop-blur-md border border-white/15 p-4 flex flex-wrap items-center justify-center gap-2.5 relative z-10">
+                    <div class="text-center text-indigo-200/80 text-sm py-6">
+                        <i class="fa-solid fa-wand-magic-sparkles text-2xl mb-2 block opacity-75"></i>
+                        點擊輪盤中央「開始抽籤」揭曉結果
+                    </div>
+                </div>
+            </div>
+
+            <!-- 歷次抽籤紀錄列表 -->
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-5 flex-1 flex flex-col min-h-[340px]">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
+                        <span>本班中獎紀錄</span>
+                        <span id="historyTotalBadge" class="text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">0 輪</span>
+                    </h2>
+
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="copyWinnersHistory()" class="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition flex items-center gap-1" title="複製本班所有中獎名單">
+                            <i class="fa-regular fa-copy"></i>
+                            <span>複製名單</span>
+                        </button>
+                        <button onclick="clearHistoryOnly()" class="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs transition" title="僅清空本班歷史紀錄">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 歷史紀錄容器 -->
+                <div id="historyListContainer" class="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[380px]">
+                    <div class="h-full flex flex-col items-center justify-center text-slate-400 py-12 text-sm">
+                        <i class="fa-regular fa-clipboard text-3xl mb-2 opacity-50"></i>
+                        <span>尚無任何抽籤紀錄</span>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- 自訂 Toast 訊息提示框 -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- JavaScript 邏輯 -->
+    <script>
+        // ==========================================
+        // 1. 全域常數、狀態與 localStorage 鍵值
+        // ==========================================
+        const STORAGE_KEY = 'LUCKY_WHEEL_CLASSROOM_DATA_V2';
+
+        const WHEEL_COLORS = [
+            { bg: '#4F46E5', text: '#FFFFFF' }, // Indigo
+            { bg: '#0EA5E9', text: '#FFFFFF' }, // Sky
+            { bg: '#10B981', text: '#FFFFFF' }, // Emerald
+            { bg: '#F59E0B', text: '#FFFFFF' }, // Amber
+            { bg: '#EC4899', text: '#FFFFFF' }, // Pink
+            { bg: '#8B5CF6', text: '#FFFFFF' }, // Violet
+            { bg: '#14B8A6', text: '#FFFFFF' }, // Teal
+            { bg: '#F43F5E', text: '#FFFFFF' }, // Rose
+            { bg: '#3B82F6', text: '#FFFFFF' }, // Blue
+            { bg: '#84CC16', text: '#FFFFFF' }, // Lime
+            { bg: '#F97316', text: '#FFFFFF' }, // Orange
+            { bg: '#06B6D4', text: '#FFFFFF' }  // Cyan
+        ];
+
+        const SAMPLE_NAMES = [
+            "01號 陳冠宇", "02號 林雅婷", "03號 張家豪", "04號 許瑋甯",
+            "05號 王柏融", "06號 蔡依林", "07號 周杰倫", "08號 戴資穎",
+            "09號 郭婞淳", "10號 李洋",   "11號 王齊麟", "12號 林昀儒",
+            "13號 楊勇緯", "14號 盧廣仲", "15號 田馥甄", "16號 吳青峰",
+            "17號 許光漢", "18號 王淨",   "19號 謝盈萱", "20號 吳慷仁"
+        ];
+
+        // 產生 1~N 號預設座號陣列
+        function generateNumberRoster(count = 36) {
+            const list = [];
+            for (let i = 1; i <= count; i++) {
+                const numStr = i < 10 ? `0${i}` : `${i}`;
+                list.push(`${numStr}號`);
+            }
+            return list;
+        }
+
+        // 建立預設三個班級資料
+        function createDefaultClasses() {
+            return [
+                {
+                    id: 'class_default_1',
+                    name: '導師班 (1~36號)',
+                    allNames: generateNumberRoster(36),
+                    excludedNames: [],
+                    history: [],
+                    roundCounter: 1
+                },
+                {
+                    id: 'class_default_2',
+                    name: '高一數學 A班',
+                    allNames: [...SAMPLE_NAMES],
+                    excludedNames: [],
+                    history: [],
+                    roundCounter: 1
+                },
+                {
+                    id: 'class_default_3',
+                    name: '高二數學 B班',
+                    allNames: generateNumberRoster(32),
+                    excludedNames: [],
+                    history: [],
+                    roundCounter: 1
+                }
+            ];
+        }
+
+        let state = {
+            classes: [],           // 所有班級清單 [{ id, name, allNames, excludedNames, history, roundCounter }]
+            currentClassId: '',    // 當前選擇的班級 ID
+            allNames: [],          // 當前班級原始完整名單
+            activeNames: [],       // 目前在輪盤上的可抽名單
+            excludedNames: [],     // 當前班級已抽中並被排除的名單
+            currentWinners: [],    // 當次抽出的幸運兒
+            history: [],           // 當前班級歷次抽籤紀錄 [{ round, time, winners }]
+            drawCount: 1,          // 每次抽選人數 N
+            multiMode: 'sequential', // 'sequential' (連續轉動) | 'simultaneous' (一次同時抽出)
+            excludeWinners: true,  // 是否排除已抽中者
+            isSpinning: false,     // 是否正在抽籤中
+            currentRotation: 0,    // 輪盤目前旋轉角度 (弧度)
+            isMuted: false,        // 音效靜音狀態
+            roundCounter: 1        // 當前班級抽籤輪次計數
+        };
+
+        // ==========================================
+        // 2. Web Audio API 合成音效引擎 (不依賴外部音檔)
+        // ==========================================
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            // 輪盤指針撥片滴答聲
+            playTick() {
+                if (state.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                // 使用短促三角波模擬木頭/塑膠撥片聲
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(680, now);
+                osc.frequency.exponentialRampToValueAtTime(180, now + 0.035);
+
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.04);
+            }
+
+            // 單次抽出小叮噹聲 (連續抽選中間揭曉用)
+            playDing() {
+                if (state.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const notes = [587.33, 880]; // D5, A5
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+                    gain.gain.setValueAtTime(0.22, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.35);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(now + idx * 0.08);
+                    osc.stop(now + idx * 0.08 + 0.36);
+                });
+            }
+
+            // 最終中獎慶祝歡呼和弦音效
+            playWinFanfare() {
+                if (state.isMuted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                // C大調琶音與高音和弦 (C5, E5, G5, C6)
+                const melody = [
+                    { freq: 523.25, delay: 0, duration: 0.15 },
+                    { freq: 659.25, delay: 0.1, duration: 0.15 },
+                    { freq: 783.99, delay: 0.2, duration: 0.15 },
+                    { freq: 1046.50, delay: 0.3, duration: 0.65 }
+                ];
+
+                melody.forEach(note => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(note.freq, now + note.delay);
+
+                    gain.gain.setValueAtTime(0.25, now + note.delay);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + note.delay + note.duration);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(now + note.delay);
+                    osc.stop(now + note.delay + note.duration + 0.02);
+                });
+            }
+        }
+
+        const sound = new SoundEngine();
+
+        // ==========================================
+        // 3. localStorage 自動儲存與多班級管理邏輯
+        // ==========================================
+        window.onload = function () {
+            loadFromLocalStorage();
+            setupResizeHandler();
+            setupKeyboardShortcuts();
+            initConfettiCanvas();
+        };
+
+        // 從 localStorage 讀取所有班級與設定
+        function loadFromLocalStorage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed.classes) && parsed.classes.length > 0) {
+                        state.classes = parsed.classes;
+                        state.currentClassId = parsed.currentClassId || parsed.classes[0].id;
+                    } else {
+                        state.classes = createDefaultClasses();
+                        state.currentClassId = state.classes[0].id;
+                    }
+
+                    // 載入全域偏好設定
+                    state.drawCount = parsed.drawCount || 1;
+                    state.multiMode = parsed.multiMode || 'sequential';
+                    state.excludeWinners = typeof parsed.excludeWinners === 'boolean' ? parsed.excludeWinners : true;
+                    state.isMuted = Boolean(parsed.isMuted);
+                } else {
+                    state.classes = createDefaultClasses();
+                    state.currentClassId = state.classes[0].id;
+                }
+            } catch (err) {
+                console.warn('讀取 localStorage 失敗，使用預設班級名單：', err);
+                state.classes = createDefaultClasses();
+                state.currentClassId = state.classes[0].id;
+            }
+
+            // 同步 UI 控制項狀態
+            document.getElementById('excludeWinnersToggle').checked = state.excludeWinners;
+            setMultiDrawMode(state.multiMode, false);
+            syncMuteUI();
+
+            // 載入當前班級資料到工作區
+            loadCurrentClassIntoWorkspace(false);
+            saveToLocalStorage(false);
+        }
+
+        // 將當前工作區狀態寫回對應班級並存入 localStorage
+        function saveToLocalStorage(animateIndicator = true) {
+            try {
+                const currentClassObj = state.classes.find(c => c.id === state.currentClassId);
+                if (currentClassObj) {
+                    currentClassObj.allNames = [...state.allNames];
+                    currentClassObj.excludedNames = [...state.excludedNames];
+                    currentClassObj.history = [...state.history];
+                    currentClassObj.roundCounter = state.roundCounter;
+                }
+
+                const payload = {
+                    classes: state.classes,
+                    currentClassId: state.currentClassId,
+                    drawCount: state.drawCount,
+                    multiMode: state.multiMode,
+                    excludeWinners: state.excludeWinners,
+                    isMuted: state.isMuted,
+                    updatedAt: new Date().toISOString()
+                };
+
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
+                if (animateIndicator) {
+                    flashSaveIndicator();
+                }
+            } catch (err) {
+                console.warn('寫入 localStorage 失敗：', err);
+            }
+        }
+
+        let saveIndicatorTimer = null;
+        function flashSaveIndicator() {
+            const icon = document.getElementById('saveStatusIcon');
+            const text = document.getElementById('saveStatusText');
+            if (!icon || !text) return;
+
+            icon.className = 'fa-solid fa-circle-check text-emerald-500 animate-bounce-short';
+            text.textContent = '✓ 已自動儲存變更至本機';
+
+            clearTimeout(saveIndicatorTimer);
+            saveIndicatorTimer = setTimeout(() => {
+                icon.className = 'fa-solid fa-cloud-arrow-up';
+                text.textContent = '已自動儲存於本機 (localStorage)';
+            }, 2000);
+        }
+
+        // 渲染班級下拉選單與頂部班級徽章
+        function renderClassSelector() {
+            const select = document.getElementById('classSelectDropdown');
+            const badge = document.getElementById('activeClassHeaderBadge');
+
+            select.innerHTML = state.classes.map(cls => {
+                const count = Array.isArray(cls.allNames) ? cls.allNames.length : 0;
+                const selectedAttr = cls.id === state.currentClassId ? 'selected' : '';
+                return `<option value="${escapeHtml(cls.id)}" ${selectedAttr}>${escapeHtml(cls.name)} (${count}人)</option>`;
+            }).join('');
+
+            const currentClassObj = state.classes.find(c => c.id === state.currentClassId);
+            if (currentClassObj && badge) {
+                badge.textContent = currentClassObj.name;
+            }
+        }
+
+        // 載入指定班級到畫面與轉盤
+        function loadCurrentClassIntoWorkspace(showMessage = false) {
+            let currentClassObj = state.classes.find(c => c.id === state.currentClassId);
+            if (!currentClassObj) {
+                currentClassObj = state.classes[0];
+                state.currentClassId = currentClassObj.id;
+            }
+
+            state.allNames = Array.isArray(currentClassObj.allNames) ? [...currentClassObj.allNames] : [];
+            state.excludedNames = Array.isArray(currentClassObj.excludedNames) ? [...currentClassObj.excludedNames] : [];
+            state.history = Array.isArray(currentClassObj.history) ? [...currentClassObj.history] : [];
+            state.roundCounter = currentClassObj.roundCounter || (state.history.length + 1);
+            state.currentWinners = [];
+
+            // 更新左側名單文字框
+            const textarea = document.getElementById('namesTextarea');
+            if (textarea) {
+                textarea.value = state.allNames.join('\n');
+            }
+
+            rebuildActivePool();
+            renderClassSelector();
+            updateUIStats();
+            renderCurrentWinners();
+            renderHistoryList();
+
+            // 確保抽選人數 N 不超過本班剩餘人數
+            setDrawCount(state.drawCount, false);
+            drawWheel();
+
+            document.getElementById('progressText').textContent = '';
+            setWheelStatus(`已載入「${currentClassObj.name}」，準備就緒`, 'ready');
+
+            if (showMessage) {
+                showToast(`已切換至「${currentClassObj.name}」`, 'info');
+            }
+        }
+
+        // 切換班級
+        function switchClass(classId) {
+            if (state.isSpinning) {
+                renderClassSelector();
+                return;
+            }
+            // 先保存舊班級狀態
+            saveToLocalStorage(false);
+            state.currentClassId = classId;
+            loadCurrentClassIntoWorkspace(true);
+            saveToLocalStorage(true);
+        }
+
+        // 新增班級彈窗
+        function promptAddClass() {
+            if (state.isSpinning) return;
+            openModal({
+                title: '新增班級名單',
+                icon: 'fa-solid fa-folder-plus text-indigo-600',
+                desc: '請輸入新班級的名稱（建立後將預設載入 1~36 號名單，您可隨時貼上學生姓名）：',
+                inputType: 'text',
+                defaultValue: `新班級 (${state.classes.length + 1})`,
+                placeholder: '例如：八年三班、高一英文A組',
+                confirmText: '建立班級',
+                onConfirm: (val) => {
+                    const name = val.trim();
+                    if (!name) {
+                        showToast('請輸入有效的班級名稱！', 'warning');
+                        return false;
+                    }
+                    const newClass = {
+                        id: 'class_' + Date.now(),
+                        name: name,
+                        allNames: generateNumberRoster(36),
+                        excludedNames: [],
+                        history: [],
+                        roundCounter: 1
+                    };
+                    state.classes.push(newClass);
+                    state.currentClassId = newClass.id;
+                    loadCurrentClassIntoWorkspace(false);
+                    saveToLocalStorage(true);
+                    showToast(`已建立並切換至「${name}」！`, 'success');
+                    return true;
+                }
+            });
+        }
+
+        // 重新命名當前班級彈窗
+        function promptRenameClass() {
+            if (state.isSpinning) return;
+            const currentClassObj = state.classes.find(c => c.id === state.currentClassId);
+            if (!currentClassObj) return;
+
+            openModal({
+                title: '重新命名班級',
+                icon: 'fa-solid fa-pen-to-square text-indigo-600',
+                desc: `請為「${currentClassObj.name}」輸入新的班級名稱：`,
+                inputType: 'text',
+                defaultValue: currentClassObj.name,
+                placeholder: '請輸入新班級名稱',
+                confirmText: '儲存名稱',
+                onConfirm: (val) => {
+                    const newName = val.trim();
+                    if (!newName) {
+                        showToast('班級名稱不能為空！', 'warning');
+                        return false;
+                    }
+                    currentClassObj.name = newName;
+                    renderClassSelector();
+                    saveToLocalStorage(true);
+                    showToast(`班級已重新命名為「${newName}」`, 'success');
+                    return true;
+                }
+            });
+        }
+
+        // 刪除當前班級彈窗
+        function promptDeleteClass() {
+            if (state.isSpinning) return;
+            if (state.classes.length <= 1) {
+                showToast('系統至少需保留一個班級，無法刪除最後一個班級！', 'warning');
+                return;
+            }
+            const currentClassObj = state.classes.find(c => c.id === state.currentClassId);
+            if (!currentClassObj) return;
+
+            openModal({
+                title: '確認刪除班級',
+                icon: 'fa-solid fa-triangle-exclamation text-rose-500',
+                desc: `確定要刪除「${currentClassObj.name}」嗎？該班級的學生名單與抽籤紀錄將會一併移除。`,
+                inputType: 'none',
+                confirmText: '確認刪除',
+                confirmStyle: 'danger',
+                onConfirm: () => {
+                    const deletedName = currentClassObj.name;
+                    state.classes = state.classes.filter(c => c.id !== state.currentClassId);
+                    state.currentClassId = state.classes[0].id;
+                    loadCurrentClassIntoWorkspace(false);
+                    saveToLocalStorage(true);
+                    showToast(`已刪除班級「${deletedName}」`, 'info');
+                    return true;
+                }
+            });
+        }
+
+        // 備份與匯入所有班級資料 Modal
+        function openBackupModal() {
+            if (state.isSpinning) return;
+            saveToLocalStorage(false);
+            const exportData = JSON.stringify({
+                classes: state.classes,
+                currentClassId: state.currentClassId
+            }, null, 2);
+
+            openModal({
+                title: '跨裝置備份 / 匯入所有班級名單',
+                icon: 'fa-solid fa-file-export text-indigo-600',
+                desc: '您可以複製下方 JSON 備份碼保存，或貼上先前備份的代碼後點擊「覆蓋匯入」將所有班級同步到平板：',
+                inputType: 'textarea',
+                defaultValue: exportData,
+                confirmText: '覆蓋匯入名單',
+                onConfirm: (rawVal) => {
+                    try {
+                        const parsed = JSON.parse(rawVal);
+                        if (!parsed || !Array.isArray(parsed.classes) || parsed.classes.length === 0) {
+                            showToast('格式錯誤：找不到有效的班級資料陣列！', 'warning');
+                            return false;
+                        }
+                        state.classes = parsed.classes;
+                        state.currentClassId = parsed.currentClassId || parsed.classes[0].id;
+                        loadCurrentClassIntoWorkspace(false);
+                        saveToLocalStorage(true);
+                        showToast(`成功匯入 ${state.classes.length} 個班級名單！`, 'success');
+                        return true;
+                    } catch (e) {
+                        showToast('JSON 格式解析失敗，請確認貼上的內容是否完整！', 'warning');
+                        return false;
+                    }
+                }
+            });
+        }
+
+        // 通用自訂 Modal 控制函式
+        let currentModalCallback = null;
+        function openModal({ title, icon, desc, inputType, defaultValue = '', placeholder = '', confirmText = '確認', confirmStyle = 'primary', onConfirm }) {
+            const modal = document.getElementById('customModal');
+            const titleText = document.getElementById('modalTitleText');
+            const modalIcon = document.getElementById('modalIcon');
+            const modalDesc = document.getElementById('modalDesc');
+            const inputWrapper = document.getElementById('modalInputWrapper');
+            const textInput = document.getElementById('modalTextInput');
+            const textareaWrapper = document.getElementById('modalTextareaWrapper');
+            const textareaInput = document.getElementById('modalTextareaInput');
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+
+            titleText.textContent = title;
+            modalIcon.className = icon;
+            modalDesc.textContent = desc;
+            confirmBtn.textContent = confirmText;
+
+            if (confirmStyle === 'danger') {
+                confirmBtn.className = 'px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-xs transition active:scale-95';
+            } else {
+                confirmBtn.className = 'px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs transition active:scale-95';
+            }
+
+            inputWrapper.classList.add('hidden');
+            textareaWrapper.classList.add('hidden');
+
+            if (inputType === 'text') {
+                inputWrapper.classList.remove('hidden');
+                textInput.value = defaultValue;
+                textInput.placeholder = placeholder;
+                setTimeout(() => { textInput.focus(); textInput.select(); }, 50);
+            } else if (inputType === 'textarea') {
+                textareaWrapper.classList.remove('hidden');
+                textareaInput.value = defaultValue;
+                setTimeout(() => { textareaInput.focus(); textareaInput.select(); }, 50);
+            }
+
+            currentModalCallback = () => {
+                let val = '';
+                if (inputType === 'text') val = textInput.value;
+                if (inputType === 'textarea') val = textareaInput.value;
+                const shouldClose = onConfirm ? onConfirm(val) : true;
+                if (shouldClose !== false) {
+                    closeModal();
+                }
+            };
+
+            confirmBtn.onclick = currentModalCallback;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('customModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            currentModalCallback = null;
+        }
+
+        // 匯入預設名單至當前班級
+        function importPreset(type, showMessage = true) {
+            if (state.isSpinning) return;
+
+            let list = [];
+            if (type === '36numbers') {
+                list = generateNumberRoster(36);
+            } else if (type === 'sampleNames') {
+                list = [...SAMPLE_NAMES];
+            }
+
+            const textarea = document.getElementById('namesTextarea');
+            textarea.value = list.join('\n');
+            
+            // 重置本班已排除名單並同步儲存
+            state.excludedNames = [];
+            handleNamesInput();
+
+            if (showMessage) {
+                showToast(type === '36numbers' ? '已載入 1~36 號名單並自動儲存！' : '已載入 20 位範例姓名並自動儲存！', 'success');
+            }
+        }
+
+        // 清空本班名單
+        function clearNamesList() {
+            if (state.isSpinning) return;
+            document.getElementById('namesTextarea').value = '';
+            state.excludedNames = [];
+            state.currentWinners = [];
+            handleNamesInput();
+            renderCurrentWinners();
+            showToast('已清空本班抽籤名單', 'info');
+        }
+
+        // 當使用者編輯 Textarea 時即時解析並自動寫入 localStorage
+        function handleNamesInput() {
+            const rawText = document.getElementById('namesTextarea').value;
+            const lines = rawText
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+
+            state.allNames = lines;
+
+            // 清理不在最新名單內的已排除紀錄
+            const allSet = new Set(state.allNames);
+            state.excludedNames = state.excludedNames.filter(name => allSet.has(name));
+
+            rebuildActivePool();
+            renderClassSelector();
+            updateUIStats();
+            drawWheel();
+            saveToLocalStorage(true);
+        }
+
+        // 根據原始名單與已排除名單計算目前輪盤可抽名單
+        function rebuildActivePool() {
+            if (!state.excludeWinners) {
+                state.activeNames = [...state.allNames];
+            } else {
+                // 為支援同名同姓也能正確排除對應次數，使用計數扣除法
+                const excludedCounts = {};
+                state.excludedNames.forEach(name => {
+                    excludedCounts[name] = (excludedCounts[name] || 0) + 1;
+                });
+
+                state.activeNames = [];
+                state.allNames.forEach(name => {
+                    if (excludedCounts[name] && excludedCounts[name] > 0) {
+                        excludedCounts[name]--;
+                    } else {
+                        state.activeNames.push(name);
+                    }
+                });
+            }
+        }
+
+        // 隨機打亂輪盤上的名字順序
+        function shuffleWheelNames() {
+            if (state.isSpinning || state.activeNames.length <= 1) return;
+            for (let i = state.activeNames.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [state.activeNames[i], state.activeNames[j]] = [state.activeNames[j], state.activeNames[i]];
+            }
+            sound.playTick();
+            drawWheel();
+            showToast('已隨機打亂輪盤排列順序！', 'info');
+        }
+
+        // ==========================================
+        // 4. 抽籤條件設定與人數控制
+        // ==========================================
+        function adjustDrawCount(delta) {
+            if (state.isSpinning) return;
+            const input = document.getElementById('drawCountInput');
+            let val = parseInt(input.value, 10) || 1;
+            val += delta;
+            setDrawCount(val, true);
+        }
+
+        function setDrawCount(val, persist = true) {
+            if (state.isSpinning) return;
+            const maxAllowed = Math.max(1, state.activeNames.length);
+            const clamped = Math.max(1, Math.min(val, maxAllowed));
+            state.drawCount = clamped;
+            document.getElementById('drawCountInput').value = clamped;
+            if (persist) {
+                saveToLocalStorage(true);
+            }
+        }
+
+        function validateDrawCount() {
+            const input = document.getElementById('drawCountInput');
+            let val = parseInt(input.value, 10);
+            if (isNaN(val) || val < 1) val = 1;
+            setDrawCount(val, true);
+        }
+
+        function setMultiDrawMode(mode, persist = true) {
+            if (state.isSpinning) return;
+            state.multiMode = mode;
+
+            const seqBtn = document.getElementById('modeSequentialBtn');
+            const simBtn = document.getElementById('modeSimultaneousBtn');
+            const desc = document.getElementById('multiModeDesc');
+
+            if (mode === 'sequential') {
+                seqBtn.className = "py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-white text-indigo-600 shadow-xs";
+                simBtn.className = "py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900";
+                desc.textContent = "輪盤將自動連續旋轉 N 次，依序揭曉每位幸運兒。";
+            } else {
+                simBtn.className = "py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-white text-indigo-600 shadow-xs";
+                seqBtn.className = "py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900";
+                desc.textContent = "輪盤旋轉一次後，同時抽出 N 位不重複的幸運兒！";
+            }
+
+            if (persist) {
+                saveToLocalStorage(true);
+            }
+        }
+
+        function handleExcludeToggleChange() {
+            const toggle = document.getElementById('excludeWinnersToggle');
+            state.excludeWinners = toggle.checked;
+            rebuildActivePool();
+            updateUIStats();
+            drawWheel();
+            saveToLocalStorage(true);
+            showToast(state.excludeWinners ? '已開啟「排除已抽中者」模式' : '已關閉排除模式，所有人皆可重複抽中', 'info');
+        }
+
+        // 將單一已排除的學生加回輪盤
+        function restoreSingleExcludedWinner(index) {
+            if (state.isSpinning) return;
+            const restoredName = state.excludedNames[index];
+            if (!restoredName) return;
+            state.excludedNames.splice(index, 1);
+            rebuildActivePool();
+            updateUIStats();
+            drawWheel();
+            saveToLocalStorage(true);
+            showToast(`已將「${restoredName}」重新加回輪盤！`, 'info');
+        }
+
+        // 將本班所有已排除的人加回輪盤
+        function restoreExcludedWinners() {
+            if (state.isSpinning) return;
+            state.excludedNames = [];
+            rebuildActivePool();
+            updateUIStats();
+            drawWheel();
+            saveToLocalStorage(true);
+            showToast('已將本班所有已抽中者重新加回輪盤！', 'success');
+        }
+
+        // ==========================================
+        // 5. Canvas 輪盤繪製邏輯
+        // ==========================================
+        function setupResizeHandler() {
+            window.addEventListener('resize', () => {
+                drawWheel();
+                resizeConfettiCanvas();
+            });
+        }
+
+        function drawWheel(highlightWinnerIndices = []) {
+            const canvas = document.getElementById('wheelCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            // 支援高解析度 Retina 螢幕
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            const size = Math.min(rect.width, rect.height);
+            
+            canvas.width = size * dpr;
+            canvas.height = size * dpr;
+            ctx.scale(dpr, dpr);
+
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const outerRadius = (size / 2) - 10;
+
+            ctx.clearRect(0, 0, size, size);
+
+            const names = state.activeNames;
+            const count = names.length;
+
+            // 若無可抽名單，繪製空狀態輪盤
+            if (count === 0) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#F1F5F9';
+                ctx.fill();
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = '#CBD5E1';
+                ctx.stroke();
+
+                ctx.fillStyle = '#64748B';
+                ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('目前輪盤無可抽名單', centerX, centerY - 62);
+                ctx.font = '13px "Noto Sans TC", sans-serif';
+                ctx.fillText('請從左側新增名單或點擊「重設」', centerX, centerY + 65);
+                ctx.restore();
+                updatePointerTargetDisplay();
+                return;
+            }
+
+            const arcAngle = (Math.PI * 2) / count;
+
+            // 繪製外框底圈陰影
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, outerRadius + 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#1E293B';
+            ctx.fill();
+            ctx.restore();
+
+            // 繪製每個扇形區塊
+            for (let i = 0; i < count; i++) {
+                const startAngle = state.currentRotation + i * arcAngle;
+                const endAngle = startAngle + arcAngle;
+
+                // 避免首尾相鄰同色
+                let colorIndex = i % WHEEL_COLORS.length;
+                if (i === count - 1 && count > 1 && colorIndex === 0) {
+                    colorIndex = 1;
+                }
+                const palette = WHEEL_COLORS[colorIndex];
+                const isHighlighted = highlightWinnerIndices.includes(i);
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
+                ctx.closePath();
+
+                ctx.fillStyle = isHighlighted ? '#FBBF24' : palette.bg;
+                ctx.fill();
+
+                // 扇形分隔白線
+                ctx.lineWidth = count > 50 ? 1 : 2;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.stroke();
+
+                // 繪製扇形文字
+                ctx.translate(centerX, centerY);
+                ctx.rotate(startAngle + arcAngle / 2);
+
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = isHighlighted ? '#1E293B' : palette.text;
+
+                // 根據人數動態計算字體大小
+                let fontSize = 16;
+                if (count > 45) fontSize = 10;
+                else if (count > 30) fontSize = 12;
+                else if (count > 18) fontSize = 14;
+                else if (count <= 8) fontSize = 18;
+
+                ctx.font = `700 ${fontSize}px "Noto Sans TC", "Inter", sans-serif`;
+
+                // 截斷過長文字避免重疊到中心按鈕
+                let displayName = names[i];
+                if (displayName.length > 10) {
+                    displayName = displayName.substring(0, 9) + '…';
+                }
+
+                const textRadius = outerRadius - 18;
+                ctx.fillText(displayName, textRadius, 0);
+                ctx.restore();
+            }
+
+            // 繪製外框裝飾鉚釘小圓點
+            const pegCount = Math.min(36, Math.max(12, count));
+            for (let i = 0; i < pegCount; i++) {
+                const pegAngle = (i * (Math.PI * 2)) / pegCount;
+                const px = centerX + Math.cos(pegAngle) * (outerRadius + 1);
+                const py = centerY + Math.sin(pegAngle) * (outerRadius + 1);
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(px, py, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#F8FAFC';
+                ctx.fill();
+                ctx.restore();
+            }
+
+            updatePointerTargetDisplay();
+        }
+
+        // 計算目前 0 度角 (3點鐘指針方向) 指向的扇形索引
+        function getPointedIndex() {
+            const count = state.activeNames.length;
+            if (count === 0) return -1;
+            const arcAngle = (Math.PI * 2) / count;
+            // 指針位於 0 弧度 (右側正中央)
+            const normalizedRotation = ((0 - state.currentRotation) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+            const index = Math.floor(normalizedRotation / arcAngle) % count;
+            return index;
+        }
+
+        function updatePointerTargetDisplay() {
+            const targetEl = document.getElementById('currentPointerTarget');
+            const idx = getPointedIndex();
+            if (idx === -1 || !state.activeNames[idx]) {
+                targetEl.textContent = '指標指向：--';
+            } else {
+                targetEl.textContent = `指標指向：${state.activeNames[idx]}`;
+            }
+        }
+
+        // ==========================================
+        // 6. 輪盤轉動動畫與抽籤核心流程
+        // ==========================================
+        async function startDrawProcess() {
+            if (state.isSpinning) return;
+
+            if (state.activeNames.length === 0) {
+                showToast('輪盤上已經沒有可抽的名單，請點擊右上角「重設」或新增名單！', 'warning');
+                return;
+            }
+
+            // 校正抽選人數 N
+            validateDrawCount();
+            const n = Math.min(state.drawCount, state.activeNames.length);
+
+            state.isSpinning = true;
+            state.currentWinners = [];
+            renderCurrentWinners();
+            updateSpinControlsState(true);
+
+            const progressText = document.getElementById('progressText');
+
+            try {
+                if (n === 1 || state.multiMode === 'sequential') {
+                    // 連續轉動抽出 N 人模式
+                    for (let step = 1; step <= n; step++) {
+                        if (state.activeNames.length === 0) break;
+
+                        if (n > 1) {
+                            progressText.textContent = `連續抽選進度：正在抽出第 ${step} / ${n} 位...`;
+                            setWheelStatus(`正在抽出第 ${step} / ${n} 位幸運兒...`, 'spinning');
+                        } else {
+                            progressText.textContent = '';
+                            setWheelStatus('幸運輪盤轉動中...', 'spinning');
+                        }
+
+                        // 計算單次旋轉時間 (若連續抽多人，動畫節奏加快讓課堂更流暢)
+                        const duration = n === 1 ? 3800 : Math.max(1800, 2800 - (n * 120));
+                        const winnerIdx = await spinWheelOnce(duration);
+                        const winnerName = state.activeNames[winnerIdx];
+
+                        state.currentWinners.push(winnerName);
+                        renderCurrentWinners();
+
+                        // 高亮剛抽中的扇形
+                        drawWheel([winnerIdx]);
+
+                        if (step < n) {
+                            sound.playDing();
+                        } else {
+                            sound.playWinFanfare();
+                            fireConfetti();
+                        }
+
+                        // 若開啟「排除已抽中者」，等待短暫視覺停留後從輪盤移除
+                        if (state.excludeWinners) {
+                            await sleep(n === 1 ? 450 : 550);
+                            state.excludedNames.push(winnerName);
+                            state.activeNames.splice(winnerIdx, 1);
+                            updateUIStats();
+                            drawWheel();
+                            saveToLocalStorage(false);
+                        } else if (step < n) {
+                            await sleep(500);
+                        }
+                    }
+                } else {
+                    // 一次同時抽出 N 人模式 (轉動一次後同時揭曉 N 個不重複名額)
+                    progressText.textContent = `一次同時抽出 ${n} 位幸運兒...`;
+                    setWheelStatus(`正在同時抽出 ${n} 位幸運兒...`, 'spinning');
+
+                    const mainWinnerIdx = await spinWheelOnce(3600);
+
+                    // 包含指針停下的第 1 位，再隨機挑選其餘 N-1 位不重複索引
+                    const chosenIndices = [mainWinnerIdx];
+                    const availableIndices = [];
+                    for (let i = 0; i < state.activeNames.length; i++) {
+                        if (i !== mainWinnerIdx) availableIndices.push(i);
+                    }
+
+                    // 洗牌剩餘索引取前 N-1 個
+                    for (let i = availableIndices.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
+                    }
+
+                    for (let k = 0; k < n - 1 && k < availableIndices.length; k++) {
+                        chosenIndices.push(availableIndices[k]);
+                    }
+
+                    // 取出所有中獎姓名
+                    state.currentWinners = chosenIndices.map(idx => state.activeNames[idx]);
+                    renderCurrentWinners();
+
+                    // 在輪盤上高亮所有抽中扇形
+                    drawWheel(chosenIndices);
+                    sound.playWinFanfare();
+                    fireConfetti();
+
+                    if (state.excludeWinners) {
+                        await sleep(750);
+                        state.currentWinners.forEach(name => state.excludedNames.push(name));
+                        rebuildActivePool();
+                        updateUIStats();
+                        drawWheel();
+                    }
+                }
+
+                // 寫入本班歷史紀錄並自動存入 localStorage
+                recordHistoryBatch(state.currentWinners);
+                saveToLocalStorage(true);
+                progressText.textContent = `本輪共抽出 ${state.currentWinners.length} 位幸運兒！`;
+                setWheelStatus('抽籤完成！恭喜中獎者', 'done');
+
+            } finally {
+                state.isSpinning = false;
+                updateSpinControlsState(false);
+                // 若剩餘人數小於設定的抽選人數 N，自動下修 N
+                if (state.activeNames.length > 0 && state.drawCount > state.activeNames.length) {
+                    setDrawCount(state.activeNames.length, true);
+                }
+            }
+        }
+
+        // 執行單次輪盤加減速物理動畫，回傳最終指向的扇形索引
+        function spinWheelOnce(duration = 3600) {
+            return new Promise(resolve => {
+                const count = state.activeNames.length;
+                const arcAngle = (Math.PI * 2) / count;
+
+                // 隨機決定目標扇形索引
+                const targetIndex = Math.floor(Math.random() * count);
+
+                // 為了自然感，讓指針停在該扇形內部隨機位置 (保留 15% 邊界避免停在線上)
+                const randomOffsetInSlice = (0.15 + Math.random() * 0.7) * arcAngle;
+                const targetAngleMod = (Math.PI * 2 - (targetIndex * arcAngle + randomOffsetInSlice)) % (Math.PI * 2);
+
+                const currentMod = ((state.currentRotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+                let deltaAngle = targetAngleMod - currentMod;
+                if (deltaAngle < 0) deltaAngle += Math.PI * 2;
+
+                // 最少旋轉 6 ~ 9 圈
+                const extraSpins = (6 + Math.floor(Math.random() * 3)) * Math.PI * 2;
+                const totalRotationDelta = extraSpins + deltaAngle;
+
+                const startRotation = state.currentRotation;
+                const startTime = performance.now();
+                let lastPointedIndex = getPointedIndex();
+
+                const pointerEl = document.getElementById('wheelPointer');
+
+                function animateFrame(now) {
+                    const elapsed = now - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+
+                    // Quartic ease-out 流暢減速曲線
+                    const easeOut = 1 - Math.pow(1 - progress, 4);
+                    state.currentRotation = startRotation + totalRotationDelta * easeOut;
+
+                    drawWheel();
+
+                    // 檢查是否跨過扇形邊界，觸發撥片滴答音效與指針微震動畫
+                    const currentPointedIndex = getPointedIndex();
+                    if (currentPointedIndex !== lastPointedIndex) {
+                        sound.playTick();
+                        lastPointedIndex = currentPointedIndex;
+
+                        if (pointerEl) {
+                            pointerEl.classList.add('pointer-tick');
+                            setTimeout(() => pointerEl.classList.remove('pointer-tick'), 45);
+                        }
+                    }
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animateFrame);
+                    } else {
+                        const finalIndex = getPointedIndex();
+                        resolve(finalIndex);
+                    }
+                }
+
+                requestAnimationFrame(animateFrame);
+            });
+        }
+
+        // ==========================================
+        // 7. 畫面更新、中獎名單與歷史紀錄渲染
+        // ==========================================
+        function updateUIStats() {
+            const total = state.allNames.length;
+            const remaining = state.activeNames.length;
+            const excluded = state.excludedNames.length;
+
+            document.getElementById('totalCountBadge').textContent = total;
+            document.getElementById('remainingCountBadge').textContent = remaining;
+            document.getElementById('maxDrawHint').textContent = `上限: ${Math.max(1, remaining)} 人`;
+
+            // 渲染已排除名單小標籤 (支援點擊單獨加回輪盤)
+            const excludedSection = document.getElementById('excludedPoolSection');
+            const excludedCountText = document.getElementById('excludedCountText');
+            const excludedTagsList = document.getElementById('excludedTagsList');
+
+            if (state.excludeWinners && excluded > 0) {
+                excludedSection.classList.remove('hidden');
+                excludedCountText.textContent = excluded;
+                excludedTagsList.innerHTML = state.excludedNames.map((name, idx) => `
+                    <button onclick="restoreSingleExcludedWinner(${idx})" title="點擊將「${escapeHtml(name)}」加回輪盤" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200 transition cursor-pointer group">
+                        <span class="line-through group-hover:no-underline">${escapeHtml(name)}</span>
+                        <i class="fa-solid fa-rotate-left text-[9px] opacity-60 group-hover:opacity-100"></i>
+                    </button>
+                `).join('');
+            } else {
+                excludedSection.classList.add('hidden');
+            }
+        }
+
+        function renderCurrentWinners() {
+            const container = document.getElementById('currentWinnersDisplay');
+            const badge = document.getElementById('currentBatchCountBadge');
+
+            if (state.currentWinners.length === 0) {
+                badge.textContent = state.isSpinning ? '抽籤進行中...' : '等待抽籤';
+                container.innerHTML = `
+                    <div class="text-center text-indigo-200/80 text-sm py-6">
+                        <i class="fa-solid fa-wand-magic-sparkles text-2xl mb-2 block opacity-75"></i>
+                        ${state.isSpinning ? '正在旋轉輪盤尋找幸運兒...' : '點擊輪盤中央「開始抽籤」揭曉結果'}
+                    </div>
+                `;
+                return;
+            }
+
+            badge.textContent = `共抽出 ${state.currentWinners.length} 人`;
+
+            // 根據抽出人數決定卡片字體大小
+            const isSingle = state.currentWinners.length === 1;
+            container.innerHTML = state.currentWinners.map((name, idx) => `
+                <div class="animate-pop-in bg-white text-slate-900 rounded-xl shadow-lg border-2 border-amber-300 ${isSingle ? 'px-6 py-4 text-2xl sm:text-3xl' : 'px-3.5 py-2 text-base sm:text-lg'} font-black flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-full bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center justify-center shrink-0">
+                        ${idx + 1}
+                    </span>
+                    <span>${escapeHtml(name)}</span>
+                </div>
+            `).join('');
+        }
+
+        function recordHistoryBatch(winners) {
+            if (!winners || winners.length === 0) return;
+
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+
+            state.history.unshift({
+                round: state.roundCounter++,
+                time: timeStr,
+                winners: [...winners]
+            });
+
+            renderHistoryList();
+        }
+
+        function renderHistoryList() {
+            const container = document.getElementById('historyListContainer');
+            const totalBadge = document.getElementById('historyTotalBadge');
+
+            totalBadge.textContent = `${state.history.length} 輪`;
+
+            if (state.history.length === 0) {
+                container.innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center text-slate-400 py-12 text-sm">
+                        <i class="fa-regular fa-clipboard text-3xl mb-2 opacity-50"></i>
+                        <span>尚無任何抽籤紀錄</span>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = state.history.map(item => `
+                <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-indigo-200 transition">
+                    <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+                        <span class="font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                            第 ${item.round} 輪 (${item.winners.length}人)
+                        </span>
+                        <span class="font-mono">${item.time}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        ${item.winners.map(w => `
+                            <span class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 font-bold text-xs shadow-sm">
+                                ${escapeHtml(w)}
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ==========================================
+        // 8. 重設、複製與輔助功能
+        // ==========================================
+        function resetAll() {
+            if (state.isSpinning) return;
+
+            state.excludedNames = [];
+            state.currentWinners = [];
+            state.history = [];
+            state.roundCounter = 1;
+
+            rebuildActivePool();
+            updateUIStats();
+            renderCurrentWinners();
+            renderHistoryList();
+            drawWheel();
+            saveToLocalStorage(true);
+
+            document.getElementById('progressText').textContent = '';
+            setWheelStatus('已重設本班輪盤與中獎紀錄', 'ready');
+            showToast('已將本班所有中獎者加回輪盤並清空紀錄！', 'success');
+        }
+
+        function clearHistoryOnly() {
+            if (state.history.length === 0) return;
+            state.history = [];
+            state.roundCounter = 1;
+            renderHistoryList();
+            saveToLocalStorage(true);
+            showToast('已清空本班歷史紀錄列表', 'info');
+        }
+
+        function copyWinnersHistory() {
+            if (state.history.length === 0 && state.currentWinners.length === 0) {
+                showToast('目前尚無中獎名單可複製！', 'warning');
+                return;
+            }
+
+            const currentClassObj = state.classes.find(c => c.id === state.currentClassId);
+            const classTitle = currentClassObj ? currentClassObj.name : '幸運輪盤';
+
+            let lines = [`【${classTitle} - 抽籤中獎名單】`];
+            if (state.currentWinners.length > 0) {
+                lines.push(`最新抽出：${state.currentWinners.join('、')}`);
+            }
+            if (state.history.length > 0) {
+                lines.push('\n--- 歷次抽籤紀錄 ---');
+                state.history.slice().reverse().forEach(item => {
+                    lines.push(`第 ${item.round} 輪 (${item.time})：${item.winners.join('、')}`);
+                });
+            }
+
+            const textToCopy = lines.join('\n');
+            const tempTextarea = document.createElement('textarea');
+            tempTextarea.value = textToCopy;
+            document.body.appendChild(tempTextarea);
+            tempTextarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextarea);
+
+            showToast('本班中獎名單已複製到剪貼簿！', 'success');
+        }
+
+        function syncMuteUI() {
+            const icon = document.getElementById('muteIcon');
+            const text = document.getElementById('muteText');
+            if (!icon || !text) return;
+
+            if (state.isMuted) {
+                icon.className = 'fa-solid fa-volume-xmark text-rose-500 w-4 text-center';
+                text.textContent = '已靜音';
+            } else {
+                icon.className = 'fa-solid fa-volume-high text-indigo-600 w-4 text-center';
+                text.textContent = '音效開啟';
+            }
+        }
+
+        function toggleMute() {
+            state.isMuted = !state.isMuted;
+            syncMuteUI();
+            saveToLocalStorage(false);
+
+            if (state.isMuted) {
+                showToast('已關閉音效', 'info');
+            } else {
+                sound.playTick();
+                showToast('已開啟音效', 'info');
+            }
+        }
+
+        function updateSpinControlsState(spinning) {
+            const spinBtn = document.getElementById('spinBtn');
+            const spinBtnIcon = document.getElementById('spinBtnIcon');
+            const spinBtnText = document.getElementById('spinBtnText');
+            const textarea = document.getElementById('namesTextarea');
+            const classDropdown = document.getElementById('classSelectDropdown');
+
+            spinBtn.disabled = spinning;
+            textarea.disabled = spinning;
+            if (classDropdown) classDropdown.disabled = spinning;
+
+            if (spinning) {
+                spinBtnIcon.className = 'fa-solid fa-spinner animate-spin text-xl sm:text-2xl mb-0.5';
+                spinBtnText.textContent = '抽籤中';
+            } else {
+                spinBtnIcon.className = 'fa-solid fa-play text-xl sm:text-2xl mb-0.5 ml-0.5 group-hover:scale-110 transition';
+                spinBtnText.textContent = '開始抽籤';
+            }
+        }
+
+        function setWheelStatus(message, type) {
+            const badge = document.getElementById('wheelStatusBadge');
+            if (!badge) return;
+
+            if (type === 'spinning') {
+                badge.className = 'inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200';
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span><span>${escapeHtml(message)}</span>`;
+            } else if (type === 'done') {
+                badge.className = 'inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200';
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-500"></span><span>${escapeHtml(message)}</span>`;
+            } else {
+                badge.className = 'inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>${escapeHtml(message)}</span>`;
+            }
+        }
+
+        // 鍵盤空白鍵觸發抽籤 / Enter 確認彈窗
+        function setupKeyboardShortcuts() {
+            window.addEventListener('keydown', (e) => {
+                const modal = document.getElementById('customModal');
+                const isModalOpen = modal && !modal.classList.contains('hidden');
+
+                if (isModalOpen) {
+                    if (e.key === 'Escape') {
+                        closeModal();
+                    } else if (e.key === 'Enter' && document.activeElement.tagName.toLowerCase() !== 'textarea') {
+                        e.preventDefault();
+                        if (currentModalCallback) currentModalCallback();
+                    }
+                    return;
+                }
+
+                // 若焦點在輸入框內則不攔截空白鍵
+                const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+                if (activeTag === 'textarea' || activeTag === 'input' || activeTag === 'select') return;
+
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    startDrawProcess();
+                }
+            });
+        }
+
+        // ==========================================
+        // 9. 慶祝彩帶特效 (Canvas Confetti)
+        // ==========================================
+        let confettiParticles = [];
+        let confettiAnimating = false;
+
+        function initConfettiCanvas() {
+            resizeConfettiCanvas();
+        }
+
+        function resizeConfettiCanvas() {
+            const canvas = document.getElementById('confettiCanvas');
+            if (!canvas) return;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function fireConfetti() {
+            const canvas = document.getElementById('confettiCanvas');
+            if (!canvas) return;
+
+            const colors = ['#4F46E5', '#EC4899', '#F59E0B', '#10B981', '#0EA5E9', '#A855F7'];
+            for (let i = 0; i < 85; i++) {
+                confettiParticles.push({
+                    x: window.innerWidth / 2,
+                    y: window.innerHeight / 2,
+                    vx: (Math.random() - 0.5) * 18,
+                    vy: (Math.random() - 0.8) * 16 - 4,
+                    size: Math.random() * 8 + 5,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 12,
+                    opacity: 1
+                });
+            }
+
+            if (!confettiAnimating) {
+                confettiAnimating = true;
+                requestAnimationFrame(updateConfetti);
+            }
+        }
+
+        function updateConfetti() {
+            const canvas = document.getElementById('confettiCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            confettiParticles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.38; // 重力
+                p.vx *= 0.99; // 空氣阻力
+                p.rotation += p.rotationSpeed;
+                p.opacity -= 0.012;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.globalAlpha = Math.max(0, p.opacity);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+                ctx.restore();
+            });
+
+            confettiParticles = confettiParticles.filter(p => p.opacity > 0 && p.y < canvas.height + 50);
+
+            if (confettiParticles.length > 0) {
+                requestAnimationFrame(updateConfetti);
+            } else {
+                confettiAnimating = false;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // ==========================================
+        // 10. 工具函式 (Toast 通知、Sleep、HTML 轉義)
+        // ==========================================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+
+            let icon = 'fa-circle-info text-indigo-400';
+            if (type === 'success') icon = 'fa-circle-check text-emerald-400';
+            if (type === 'warning') icon = 'fa-triangle-exclamation text-amber-400';
+
+            toast.className = 'animate-pop-in bg-slate-900/95 text-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 text-xs sm:text-sm font-medium flex items-center gap-2.5 pointer-events-auto';
+            toast.innerHTML = `<i class="fa-solid ${icon} text-base"></i><span>${escapeHtml(message)}</span>`;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                toast.style.transition = 'all 0.25s ease';
+                setTimeout(() => toast.remove(), 250);
+            }, 2600);
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>
